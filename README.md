@@ -8,21 +8,23 @@
 
 **See how an attacker would move through your Compose stack, then remove those paths with previewed, reversible fixes.**
 
-![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D6)
-![CI](https://img.shields.io/badge/CI-GitHub%20Actions%20(Linux)-2088FF)
-![Version](https://img.shields.io/badge/version-1.0.0-38bdf8)
+![Windows](https://img.shields.io/badge/Windows-10%20%2F%2011%20x64-0078D6)
+![Linux](https://img.shields.io/badge/Linux-x86__64-FCC624)
+![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF)
+![Version](https://img.shields.io/badge/version-1.1.0-38bdf8)
 ![Local](https://img.shields.io/badge/runs-100%25%20local-22c55e)
 ![Licence](https://img.shields.io/badge/licence-free%20to%20use-lightgrey)
 
-<a href="https://github.com/MMoizSiddiqui/DockWatch/releases/latest"><img src="https://img.shields.io/badge/%E2%AC%87%20Download%20for%20Windows-DockWatch--1.0.0--windows--x64.zip-0078D6?style=for-the-badge" alt="Download for Windows: DockWatch-1.0.0-windows-x64.zip"></a>
+<a href="https://github.com/MMoizSiddiqui/DockWatch/releases/latest/download/DockWatch-1.0.0-windows-x64.zip"><img src="https://img.shields.io/badge/%E2%AC%87%20Download-Windows%20(.zip)-0078D6?style=for-the-badge" alt="Download for Windows"></a>
+<a href="https://github.com/MMoizSiddiqui/DockWatch/releases/latest/download/dockwatch-engine-linux-x86_64.tar.gz"><img src="https://img.shields.io/badge/%E2%AC%87%20Download-Linux%20(.tar.gz)-E95420?style=for-the-badge" alt="Download for Linux"></a>
 
-<sub>The download is on the <b>Releases</b> page (also in the right-hand column of this page), not in the file list above: the files here are the guide, the CI template and the demo.</sub>
+<sub>Also on the <a href="https://github.com/MMoizSiddiqui/DockWatch/releases/latest">Releases</a> page and in the <a href="downloads">downloads</a> folder above.</sub>
 
-[Releases](https://github.com/MMoizSiddiqui/DockWatch/releases/latest) ·
-[Quick start](#-quick-start) ·
+[Setup: Windows](docs/setup-windows.md) ·
+[Setup: Linux](docs/setup-linux.md) ·
+[CI gate](#-use-it-in-github-actions) ·
 [How it works](#-how-it-works) ·
 [Tour](#-a-tour) ·
-[CI gate](#-use-it-in-github-actions) ·
 [Troubleshooting](#-troubleshooting)
 
 </div>
@@ -47,44 +49,47 @@ Everything runs **on your machine**. DockWatch reads your files. It never starts
 
 ---
 
-## Two ways to use DockWatch: pick yours
+## Which one do I need?
 
-| | **On your Windows PC** (the app) | **In your GitHub repository** (automatic check) |
+| I want… | Download | Setup |
 |---|---|---|
-| **What you get** | The full app with dashboard, attack graph, fixes and reports | A ✅ / ❌ check on every push and pull request that changes a compose file or Dockerfile |
-| **What you download** | **`DockWatch-1.0.0-windows-x64.zip`** from [Releases](https://github.com/MMoizSiddiqui/DockWatch/releases/latest). Nothing else | **Nothing.** You copy one file, [`ci-template/dockwatch.yml`](ci-template/dockwatch.yml), into your repository |
-| **How** | Unzip, double-click `DockWatch.exe` ([Quick start](#-quick-start)) | Save it as `.github/workflows/dockwatch.yml` and commit ([CI guide](#-use-it-in-github-actions)) |
+| **The app on my Windows PC** (10 / 11, 64-bit) | `DockWatch-1.0.0-windows-x64.zip`. Nothing else | Extract, double-click `DockWatch.exe`: **[Windows setup](docs/setup-windows.md)** |
+| **DockWatch on Linux**: a desktop, a VM (VMware, VirtualBox), or a server | `dockwatch-engine-linux-x86_64.tar.gz` | Extract, run `./start-dockwatch`: **[Linux setup](docs/setup-linux.md)** (servers: view it from your PC through an SSH tunnel) |
+| **An automatic ✅ / ❌ check in my GitHub repository** | **Nothing.** Copy one file, [`ci-template/dockwatch.yml`](ci-template/dockwatch.yml) | Save it as `.github/workflows/dockwatch.yml` and commit: **[CI guide](ci-template/README.md)** |
 
-You can use either one, or both: with the same settings, they give the same result.
-
-> **The other files on the Releases page are not for you to download.** `dockwatch-engine-linux-x86_64.tar.gz` is the Linux version of DockWatch, which GitHub's servers download automatically when the CI check runs. `SHA256SUMS.txt` holds the checksums DockWatch uses to verify the downloads.
+You can combine them; with the same settings they give the same result. The Linux package is also what the CI check downloads by itself. `SHA256SUMS.txt` holds the checksums used to verify the downloads, and GitHub's *Source code* zips only contain this repository's documents, not the program.
 
 ---
 
 ## 🚀 Quick start
 
-**Requirements:** Windows 10 or 11 (64-bit). No Python, no installer, no administrator rights.
+### Windows
+1. Download **`DockWatch-1.0.0-windows-x64.zip`** ([Releases](https://github.com/MMoizSiddiqui/DockWatch/releases/latest) or [`downloads`](downloads)).
+2. **Extract** it, for example to `Documents\DockWatch`, then double-click **`DockWatch.exe`**.
+3. The first time, a setup window downloads and verifies the scanners (about 140 MB, one to a few minutes). The dashboard then opens at **http://127.0.0.1:8765/**. **Close the black DockWatch window to stop it.**
 
-1. Download **`DockWatch-1.0.0-windows-x64.zip`** from [**Releases**](https://github.com/MMoizSiddiqui/DockWatch/releases/latest).
-2. **Unzip** it, for example to `Documents\DockWatch`. Don't run it from inside the zip.
-3. Double-click **`DockWatch.exe`**.
+> **SmartScreen** may say it "protected your PC" because DockWatch is new: click **More info → Run anyway**.
 
-The first start opens a small **setup window**. It downloads the scanners (Hadolint and Trivy) from their official GitHub releases and **checks every file against its SHA-256 checksum** before using it. The download is about 140 MB, so this takes from one to a few minutes depending on your connection. If anything fails, the window says why and what to do, and offers **Retry**.
+### Linux
+```bash
+wget https://github.com/MMoizSiddiqui/DockWatch/releases/latest/download/dockwatch-engine-linux-x86_64.tar.gz
+tar -xzf dockwatch-engine-linux-x86_64.tar.gz
+cd dockwatch-engine && ./start-dockwatch
+```
+The first time, it downloads and verifies the scanners, then opens **http://127.0.0.1:8765/**. **Ctrl+C stops it.** Open a project by pasting its folder path on the Home page. On a server or a VM without a desktop, see [Linux setup, part B](docs/setup-linux.md#b-server-or-headless-vm-view-the-dashboard-from-your-pc).
 
-DockWatch then opens in your browser at **`http://127.0.0.1:8765/`**. It listens on your own computer only, so nobody else on the network can reach it. A small black **DockWatch** window stays open while it runs; **close it to stop DockWatch**.
-
-> **SmartScreen:** Windows may say it "protected your PC", because DockWatch is new and not yet widely downloaded. Click **More info → Run anyway**.
+The dashboard listens on your own computer only (`127.0.0.1`), so nobody else on the network can reach it.
 
 | Optional | Needed for |
 |---|---|
-| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | Only the image scanners (Trivy image CVEs, Dockle CIS checks). Everything else works without Docker |
-| [Git](https://git-scm.com/download/win) | The **git timeline** on the History page |
+| Docker ([Desktop](https://www.docker.com/products/docker-desktop/) on Windows, Docker Engine on Linux) | Only the image scanners (Trivy image CVEs, Dockle CIS checks). Everything else works without Docker |
+| Git | The **git timeline** on the History page |
 
 ---
 
 ## 🎯 Try it in 2 minutes: the demo
 
-The download includes **`dockertestfile`**, a small online shop built **on purpose** with real-world mistakes:
+The Windows download and this repository include **`dockertestfile`**, a small online shop built **on purpose** with real-world mistakes:
 
 - a Docker socket mounted into a container on the public network;
 - a privileged monitoring container;
@@ -93,7 +98,7 @@ The download includes **`dockertestfile`**, a small online shop built **on purpo
 - Dockerfiles that run as root;
 - a shared upload volume, and more.
 
-1. In DockWatch, click **📁 Browse…**, pick the `dockertestfile` folder and press **Open and scan**.
+1. In DockWatch, click **📁 Browse…** (on Linux, paste the folder's path), pick the `dockertestfile` folder and press **Open & scan**.
 2. You get **risk 100, FAIL**: 64 findings, 5 attack paths, 7 generated fixes.
 3. Open **Fixes** and apply the **★ recommended next** fix each time:
 
@@ -105,9 +110,9 @@ The download includes **`dockertestfile`**, a small online shop built **on purpo
 | 3 | Dockerfile Hardening | 62 | 0 | ✅ PASS |
 | 4 | Container Hardening | **56** | 0 | ✅ PASS |
 
-<sub>Measured with DockWatch 1.0.0 on the bundled demo, with the default scanners and the default limit of 70.</sub>
+<sub>Measured on the bundled demo on Windows and Linux, with the default scanners and the default limit of 70.</sub>
 
-`dockertestfile\VULNERABILITIES.txt` lists every planted weakness, which tool finds it and which fix removes it. To start over, double-click **`dockertestfile\reset-demo.cmd`**.
+`dockertestfile/VULNERABILITIES.txt` lists every planted weakness, which tool finds it and which fix removes it. To start over, double-click **`reset-demo.cmd`** on Windows, or run **`sh reset-demo.sh`** on Linux (both are in the `dockertestfile` folder).
 
 ---
 
@@ -314,10 +319,15 @@ All the options (limit, severity, image scanning, skipped scanners, auto-update,
 
 ## ⌨️ Command line
 
-The download also contains the engine, for scripts and pipelines:
+Both downloads contain the engine, for scripts and pipelines:
 
 ```bat
+:: Windows (in the DockWatch folder)
 engine\dockwatch-engine.exe scan "C:\path\to\project" --gate --pdf report.pdf
+```
+```bash
+# Linux (in the dockwatch-engine folder)
+./dockwatch-engine scan /path/to/project --gate --pdf report.pdf
 ```
 
 | Command | Purpose |
@@ -339,9 +349,10 @@ Add `--help` to any command to see all its options.
 |---|---|
 | `<project>\.dockwatch\config.json` | That project's settings. Commit it to share them with your team |
 | `<project>\.dockwatch\` (everything else) | History, saved scans and fix backups. Keep these out of git |
-| `%LOCALAPPDATA%\DockWatch\` | Scanners, recent projects, learned scan timings and logs (`setup.log`, `server.log`) |
+| `%LOCALAPPDATA%\DockWatch\` (Windows) | Scanners, recent projects, learned scan timings and logs (`setup.log`, `server.log`) |
+| `~/.local/share/dockwatch/` (Linux) | Scanners, recent projects and learned scan timings |
 
-Deleting `%LOCALAPPDATA%\DockWatch` makes the next start a first start again.
+Deleting that folder makes the next start a first start again.
 
 ---
 
@@ -355,6 +366,7 @@ Deleting `%LOCALAPPDATA%\DockWatch` makes the next start a first start again.
 | A report says **INCOMPLETE** | Something could not be scanned; the report lists each item and the reason |
 | Nothing happens on double-click | Make sure the whole folder was unzipped: `DockWatch.exe` needs the `engine` folder next to it |
 | The git timeline is empty | Install Git, and make sure the project folder is a git repository with commits |
+| Linux: `Permission denied`, `GLIBC` errors, or reaching a server's dashboard | See [Linux setup → Problems](docs/setup-linux.md#problems) |
 
 Questions, bugs or ideas: **[open an issue](https://github.com/MMoizSiddiqui/DockWatch/issues)**.
 
