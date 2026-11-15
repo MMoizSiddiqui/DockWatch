@@ -77,7 +77,7 @@ The 5 attack paths DockWatch reports at the start:
 --------------------------------------------------
 
 Double-click DockWatch.exe. In the browser, click "No project" at the top, then "Browse..." and
-pick this folder (or paste its path), and press "Open and scan":
+pick this folder (or paste its path), and press "Open & scan":
 
    ...\DockWatch\dockertestfile   (the folder this file is in)
 

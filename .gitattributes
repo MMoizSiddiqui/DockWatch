@@ -1,2 +1,6 @@
 *.cmd text eol=crlf
 *.bat text eol=crlf
+*.sh text eol=lf
+# downloads/ holds ready-made program packages
+*.zip binary
+*.tar.gz binary
