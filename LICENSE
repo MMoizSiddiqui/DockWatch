@@ -1,0 +1,48 @@
+DockWatch End-User Licence
+==========================
+
+Copyright (c) 2026 DockWatch Team (MMoizSiddiqui). All rights reserved.
+
+DockWatch ("the Software") is the property of its author. The source code is not published.
+You are given the following permission, free of charge, subject to the conditions below.
+
+1. Permission to use
+   You may download, install and use the Software, in the form distributed by the author
+   (the release packages at https://github.com/MMoizSiddiqui/DockWatch/releases), on any number
+   of your own computers and in your own continuous-integration pipelines, for personal,
+   educational, research or commercial purposes. You may change the Software's settings and
+   use all of its features, and you may share the reports it produces.
+
+2. Conditions. You may NOT:
+   a. copy, modify, translate or create works based on the Software, its program code, its
+      user interface code or its templates, except as needed to install and run it;
+   b. decompile, disassemble, unpack or otherwise reverse-engineer the Software, or try to
+      obtain its source code, except where applicable law expressly allows this despite
+      this restriction;
+   c. distribute, sell, rent, sublicense or publish the Software, or a modified copy of it,
+      other than by pointing to the author's official download page;
+   d. remove or change copyright notices, this licence, or the third-party notices.
+
+3. Third-party components
+   The Software includes, and downloads at run time, components made by others (for example
+   Python and Python libraries, compose-lint, Hadolint, Trivy and Dockle). Each of them is
+   licensed under its own terms, listed in THIRD_PARTY_NOTICES.md. Those terms apply to those
+   components and are not limited by this licence.
+
+4. No warranty
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+   INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+   PURPOSE AND NON-INFRINGEMENT. Security findings, scores and suggested fixes are aids to your
+   own judgement; review every change before you rely on it.
+
+5. Limitation of liability
+   IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
+   AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+   SOFTWARE OR THE USE OF OR OTHER DEALINGS IN THE SOFTWARE.
+
+6. End of the permission
+   The permission in section 1 ends automatically if you break any condition of this licence.
+   You must then stop using the Software and delete your copies.
+
+Questions or permission requests: moiz87siddiqui@gmail.com or
+https://github.com/MMoizSiddiqui/DockWatch/issues
