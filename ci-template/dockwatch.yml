@@ -1,0 +1,183 @@
+# DockWatch CI gate
+# =================
+# Copy this file into YOUR repository as   .github/workflows/dockwatch.yml   and commit it.
+# Nothing else is needed: DockWatch is downloaded and installed on GitHub's servers each run,
+# and all settings are in the YOUR SETTINGS block below.
+#
+# From then on, every push or pull request that changes a compose file, a Dockerfile or this
+# file is scanned automatically:
+#   - risk score above your limit  -> red X (GitHub emails the pusher; with branch
+#                                     protection the pull request cannot be merged)
+#   - otherwise                    -> green tick
+# Nothing in your repository is ever changed or undone. The full report is attached to each
+# run (Actions tab -> the run -> Artifacts) and a summary is shown on the run's page.
+#
+# Full guide: https://github.com/MMoizSiddiqui/DockWatch/blob/HEAD/ci-template/README.md
+
+name: DockWatch security gate
+
+env:
+  # ======================= YOUR SETTINGS: edit only this block =======================
+  # Change a value between the quotes and commit: the check re-runs with the new settings.
+  #
+  # Folder that contains your compose file, relative to the repository root.
+  #   "."  = the root (default)        "deploy"  = a folder called deploy
+  PROJECT_DIR: "."
+  #
+  # Fail the check when the highest risk score (0-100) is ABOVE this number.
+  #   ""   = the default limit, 70
+  #   "60" = stricter      "85" = more relaxed
+  FAIL_THRESHOLD: ""
+  #
+  # Hide findings below this severity: "info", "low", "medium", "high" or "critical".
+  #   ""   = show everything (default)
+  MIN_SEVERITY: ""
+  #
+  # Also scan the container images: known CVEs (Trivy image) and CIS checks (Dockle).
+  #   "false" = faster, checks only your compose file and Dockerfiles (default)
+  #   "true"  = slower (a few minutes), also downloads and checks images such as nginx:1.27
+  SCAN_IMAGES: "false"
+  #
+  # Scanners to switch off, separated by spaces. Choose from: compose-lint hadolint trivy
+  #   ""   = run them all (default)        "hadolint" = skip Hadolint
+  SKIP_SCANNERS: ""
+  #
+  # Use the newest scanner versions. DockWatch tests each new version on a built-in sample
+  # first; if it does not work correctly, DockWatch keeps the tested version and this run shows
+  # a warning with a link to ask the DockWatch developer to support it.
+  #   "true"  = always the newest working versions (default)
+  #   "false" = always the same tested versions (identical results on every run)
+  AUTO_UPDATE_SCANNERS: "true"
+  #
+  # Scan patience: how long DockWatch waits on a scanner. DockWatch watches every tool (CPU,
+  # data, output): a tool that is working is never stopped for being slow.
+  #   "default" = recommended: a stuck tool is stopped after 3 minutes without any activity,
+  #               60 minutes absolute per file or image
+  #   "custom"  = use STALL_MINUTES and MAX_MINUTES below
+  SCAN_PATIENCE: "default"
+  #   Custom only: minutes without ANY activity before a stuck tool is stopped (1 to 15)
+  STALL_MINUTES: "3"
+  #   Custom only: absolute limit in minutes for one file or image (10 to 240)
+  MAX_MINUTES: "60"
+  #
+  # ===================================== end of YOUR SETTINGS =======================
+
+  # Where DockWatch comes from. Normally left as they are.
+  DOCKWATCH_REPO: MMoizSiddiqui/DockWatch
+  #   "latest" = the newest DockWatch release, or a fixed one such as "1.0.0"
+  DOCKWATCH_VERSION: "latest"
+
+on:
+  push:
+    paths:
+      - "**/docker-compose*.yml"
+      - "**/docker-compose*.yaml"
+      - "**/compose*.yml"
+      - "**/compose*.yaml"
+      - "**/Dockerfile*"
+      - ".github/workflows/dockwatch.yml"
+  pull_request:
+    paths:
+      - "**/docker-compose*.yml"
+      - "**/docker-compose*.yaml"
+      - "**/compose*.yml"
+      - "**/compose*.yaml"
+      - "**/Dockerfile*"
+      - ".github/workflows/dockwatch.yml"
+  workflow_dispatch: # adds a "Run workflow" button in the Actions tab
+
+permissions:
+  contents: read
+  security-events: write # lets findings appear in the Security tab
+
+jobs:
+  dockwatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the project
+        uses: actions/checkout@v5
+
+      # Downloads the official DockWatch package for Linux from the releases page and checks it
+      # against the checksum published with it. compose-lint comes with it.
+      - name: Install DockWatch
+        run: |
+          set -eu
+          base="https://github.com/${DOCKWATCH_REPO}/releases"
+          if [ "$DOCKWATCH_VERSION" = "latest" ]; then url="$base/latest/download"; else url="$base/download/v$DOCKWATCH_VERSION"; fi
+          cd "$RUNNER_TEMP"
+          curl -sSfL -o dockwatch.tar.gz "$url/dockwatch-engine-linux-x86_64.tar.gz"
+          curl -sSfL -o SHA256SUMS.txt "$url/SHA256SUMS.txt"
+          expected="$(tr -d '\r' < SHA256SUMS.txt | grep ' dockwatch-engine-linux-x86_64.tar.gz$' | cut -d' ' -f1)"
+          actual="$(sha256sum dockwatch.tar.gz | cut -d' ' -f1)"
+          if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
+            echo "::error::The DockWatch download did not match its published checksum, so it was not used."
+            exit 1
+          fi
+          mkdir -p "$HOME/dockwatch" && tar -C "$HOME/dockwatch" -xzf dockwatch.tar.gz
+          ln -sf "$HOME/dockwatch/dockwatch-engine/dockwatch-engine" "$HOME/dockwatch/dockwatch"
+          echo "$HOME/dockwatch" >> "$GITHUB_PATH"
+          "$HOME/dockwatch/dockwatch" --help > /dev/null && echo "DockWatch installed"
+
+      # Downloads the official Hadolint, Trivy and Dockle releases and checks their checksums.
+      # A scanner that cannot be installed is skipped (and listed in the summary); the check goes on.
+      - name: Install the scanners (Hadolint, Trivy, Dockle)
+        run: dockwatch setup || echo "::warning::Some scanners could not be installed; DockWatch skips them."
+
+      # Newer versions are verified and self-tested first; one that fails is not used and this
+      # run shows why, with a link to ask the developer to support it.
+      - name: Update the scanners to the newest working versions
+        if: env.AUTO_UPDATE_SCANNERS == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: dockwatch update || echo "::warning::Scanner update check failed; the tested versions are used."
+
+      - name: Scan with DockWatch and apply the gate
+        working-directory: ${{ env.PROJECT_DIR }}
+        shell: bash {0} # no "exit on first error": the summary below is written for PASS and FAIL
+        run: |
+          args=(scan . --gate --sarif dockwatch.sarif.json --report dockwatch-report.html)
+          if [ -n "$FAIL_THRESHOLD" ]; then args+=(--fail-blast-radius "$FAIL_THRESHOLD"); fi
+          if [ -n "$MIN_SEVERITY" ]; then args+=(--min-severity "$MIN_SEVERITY"); fi
+          if [ "$SCAN_IMAGES" = "true" ]; then args+=(--enable-scanner trivy-image --enable-scanner dockle); fi
+          for s in $SKIP_SCANNERS; do args+=(--disable-scanner "$s"); done
+          if [ "$SCAN_PATIENCE" = "custom" ]; then args+=(--stall-minutes "$STALL_MINUTES" --max-minutes "$MAX_MINUTES"); fi
+          echo "Running: dockwatch ${args[*]}"
+          dockwatch "${args[@]}" > dockwatch-output.txt 2>&1
+          status=$?
+          cat dockwatch-output.txt
+          if [ "$status" -eq 0 ]; then verdict=":white_check_mark: PASS"
+          elif [ "$status" -eq 1 ]; then verdict=":x: FAIL"
+          else verdict=":warning: ERROR: check YOUR SETTINGS at the top of dockwatch.yml"; fi
+          {
+            echo "## DockWatch: $verdict"
+            echo
+            echo '```'
+            cat dockwatch-output.txt
+            echo '```'
+            if [ "$status" -le 1 ]; then
+              echo
+              echo "Full report: download **dockwatch-report** under Artifacts on this page."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+      - name: Attach the reports to this run
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dockwatch-report
+          path: |
+            ${{ env.PROJECT_DIR }}/dockwatch-report.html
+            ${{ env.PROJECT_DIR }}/dockwatch.sarif.json
+            ${{ env.PROJECT_DIR }}/dockwatch-output.txt
+          if-no-files-found: ignore
+
+      # Code scanning is free on public repositories; private ones need GitHub Advanced Security.
+      # Where it is not available this step is skipped over, so it never turns the check red.
+      - name: Show findings in the Security tab
+        if: always() && hashFiles(format('{0}/dockwatch.sarif.json', env.PROJECT_DIR)) != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: ${{ env.PROJECT_DIR }}/dockwatch.sarif.json
+          category: dockwatch
