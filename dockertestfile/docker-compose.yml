@@ -1,0 +1,81 @@
+# DockWatch demo stack. DELIBERATELY INSECURE: do not deploy it anywhere real.
+# Every weakness is listed in VULNERABILITIES.txt next to this file.
+services:
+  web:
+    image: nginx:1.27-alpine
+    ports:
+      - "18080:80"  # 8080 is often taken (e.g. by Oracle XE); open http://localhost:18080
+    networks:
+      - frontend
+    depends_on:
+      - api
+
+  api:
+    build: ./app
+    image: dockertestfile-api:demo
+    environment:
+      DATABASE_URL: postgres://shop@db:5432/shop
+      REDIS_URL: redis://cache:6379/0
+      DB_PASSWORD: SuperSecret123
+      JWT_SECRET: change-me-0d9f2c71
+    volumes:
+      - uploads:/data/uploads
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      - db
+      - cache
+
+  worker:
+    build: ./app
+    command: ["python", "worker.py"]
+    healthcheck:  # the image's check probes the API on port 5000; the worker serves no HTTP
+      test: ["CMD", "python", "-c", "import pathlib, sys; sys.exit(0 if pathlib.Path('/data/uploads').is_dir() else 1)"]
+      interval: 30s
+    volumes:
+      - uploads:/data/uploads
+    networks:
+      - backend
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: shop
+      POSTGRES_PASSWORD: SuperSecret123
+    networks:
+      - backend
+
+  cache:
+    image: redis:7-alpine
+    networks:
+      - frontend
+      - backend
+
+  watchtower:
+    image: containrrr/watchtower:1.7.1
+    environment:
+      DOCKER_API_VERSION: "1.44"  # watchtower 1.7.1 defaults to API 1.25; Docker 29 needs >= 1.40
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - frontend
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    privileged: true
+    networks:
+      - frontend
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    pid: host
+    networks:
+      - frontend
+
+networks:
+  frontend:
+  backend:
+
+volumes:
+  uploads:

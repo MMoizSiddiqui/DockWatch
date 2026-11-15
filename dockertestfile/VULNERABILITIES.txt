@@ -1,0 +1,253 @@
+DOCKWATCH DEMO STACK  (folder: dockertestfile)
+================================================
+
+This folder is a small "online shop" built ON PURPOSE with security mistakes, so that every
+part of DockWatch has something to find, explain, score and fix. Do not deploy it.
+
+  docker-compose.yml   8 services: web, api, worker, db, cache, watchtower, cadvisor, node-exporter
+  app/Dockerfile       the image that api and worker are built from
+  app/*.py, app/requirements.txt   a tiny Flask app, only so the image can really be built
+  reset-demo.cmd       double-click: puts everything back to this vulnerable state after a demo
+
+All numbers below were measured on this PC with compose-lint, Hadolint 2.15.1 and Trivy 0.76.2
+(DockWatch.exe installs and updates these scanners by itself; Trivy image and Dockle are off by
+default, see section 6).
+
+
+1. WHAT IS WEAK, WHERE, WHO FINDS IT, WHAT FIXES IT
+----------------------------------------------------
+
+docker-compose.yml
+
+ #  Where (line)              Weakness                                       Found by                       Fixed by
+ -- ------------------------- ---------------------------------------------- ------------------------------ ---------------------------
+ 1  web  ports 18080:80 (7)   Public entry point, bound to ALL interfaces    compose-lint CL-0005;          left as is on purpose: it is
+                                                                             DockWatch marks web "exposed"  the website (see section 4)
+ 2  api  DB_PASSWORD,         Passwords / keys written in plain text in     compose-lint CL-0020 (x2);     Secret Guard
+         JWT_SECRET (19-20)   the file: anyone with the file or             DockWatch "plaintext_secret"
+                              `docker inspect` has them                     -> api becomes a target
+ 3  db   POSTGRES_PASSWORD    Same, for the database                         CL-0020; db becomes a target   Secret Guard
+         (45)
+ 4  network "frontend"        ONE network holds the public web server AND    DockWatch DW-MIXED-NETWORK;    Network Segmentation, or
+    (9, 24, 52, 62, 68, 74)   watchtower (Docker socket), cadvisor          DW-ATTACK-PATH x5 (below)      Least-Privilege Networks,
+                              (privileged), node-exporter (host PIDs),                                      or Minimum Cut
+                              api and cache -> a hacked web server can
+                              talk to all of them
+ 5  cache on frontend AND     Redis bridges the public network and the       DockWatch (path web -> cache   Least-Privilege Networks /
+    backend (52-53)           private network: web -> cache -> db            -> db, 2 hops)                 Network Segmentation
+ 6  watchtower mounts         Whoever controls watchtower controls Docker,  compose-lint CL-0001          Socket Guard (filtering
+    /var/run/docker.sock (60) i.e. is root on the host                       (critical); DockWatch          proxy, only the API calls
+                                                                             "docker_socket" (+40)          watchtower needs)
+ 7  cadvisor privileged (66)  Almost no isolation from the host              CL-0002 (critical);            isolated onto its own
+                                                                             DockWatch "privileged" (+35)   internal network by the
+                                                                                                            network fixes
+ 8  node-exporter pid: host   Sees and can signal every host process         CL-0010 (high);                isolated by the network
+    (72)                                                                     DockWatch "host namespace"     fixes
+ 9  api + worker share the    A file written by one is read by the other:   DockWatch "shared volume"      kept (the app needs it);
+    volume "uploads" (22, 37) a lateral-movement link without any network    edge (+12)                     shown in the graph
+10  every service             No no-new-privileges, no memory/CPU limit,     CL-0003, CL-0026, CL-0006      Container Hardening
+                              capabilities not dropped                       (x8 each)                      (cap_drop only where the
+                                                                                                            service runs as non-root)
+11  every image               Pinned by tag, not by digest                   CL-0019                        manual (see section 4)
+12  every service             Root filesystem writable                       CL-0007 (low)                  manual (see section 4)
+
+app/Dockerfile
+
+ #  Where (line)              Weakness                                       Found by                       Fixed by
+ -- ------------------------- ---------------------------------------------- ------------------------------ ---------------------------
+13  no USER instruction       Container runs as root                         Trivy DS-0002 (high)           Dockerfile Hardening
+                                                                                                            (USER 10001:10001)
+14  ADD (5, 8)                ADD can download URLs and unpack archives      Hadolint DL3020 (x2);          Dockerfile Hardening
+                              silently; COPY is the safe choice              Trivy DS-0005                  (ADD -> COPY)
+15  pip install (6)           pip cache left in the image                    Hadolint DL3042                Dockerfile Hardening
+                                                                                                            (--no-cache-dir)
+
+Because api and worker are both built from app/Dockerfile, DockWatch counts the Dockerfile
+findings against BOTH services (you will see each one listed for api and for worker).
+
+The 5 attack paths DockWatch reports at the start:
+   web -> watchtower     1 hop  via frontend                       (risk 72)  T1190 -> T1610/T1611
+   web -> db             2 hops via frontend -> backend (cache/api) (risk 59)
+   web -> cadvisor       1 hop  via frontend                       (risk 57)
+   web -> api            1 hop  via frontend                       (risk 47)
+   web -> node-exporter  1 hop  via frontend                       (risk 37)
+
+
+2. DEMO SCRIPT (what to click, what you will see)
+--------------------------------------------------
+
+Double-click DockWatch.exe. In the browser, click "No project" at the top, then "Browse..." and
+pick this folder (or paste its path), and press "Open and scan":
+
+   ...\DockWatch\dockertestfile   (the folder this file is in)
+
+(Next time it is listed under "Recent projects": one click. From a terminal, in the DockWatch folder: engine\dockwatch-engine.exe serve dockertestfile)
+Every scan opens the scan window that follows the 8 steps live; it closes by itself.
+
+ Step  Action                                   Result (measured)
+ ----  ---------------------------------------  ----------------------------------------------------
+  0    First scan                               Max risk 100, FAIL, 5 attack paths, 1 mixed network,
+                                                64 findings, 7 fixes offered
+  1    Attack graph -> replay a path            web -> frontend -> watchtower -> docker.sock -> host
+  2    Fixes: apply Network Segmentation        100, paths 5 -> 2, mixed 1 -> 0  (preview said the same)
+       (the "Next step" banner recommends it)
+  3    Apply Secret Guard                       100 -> 77, paths 2 -> 0
+  4    Apply Dockerfile Hardening               77 -> 62, verdict now PASS
+  5    Apply Container Hardening                62 -> 56
+  6    Apply Socket Guard (banner: "Optional")  56 -> 64: the number goes UP a little because a new
+                                                service (the socket proxy) now holds the socket and is
+                                                scored; real risk goes DOWN because only the API calls
+                                                watchtower needs are allowed.
+  7    Apply Container Hardening again          64 -> 61 (it hardens the new proxy service)
+  8    Rescan                                   61, PASS, 0 attack paths, 0 mixed networks,
+                                                NO fixes left
+
+Every preview number matched the real result after Apply (checked automatically, every step).
+
+Show the report: Download -> PDF. It starts with "Coverage: COMPLETE" and ends with "Scan
+details": each scanner's version, time and findings, the settings used, and the rules DockWatch
+uses to decide when a scanner is stuck (a working scanner is never stopped for being slow).
+
+Other orders also end in PASS. Example tested: Secret Guard -> Socket Guard -> Least-Privilege
+Networks -> Dockerfile Hardening -> Container Hardening also ends at 61, PASS, 0 paths.
+Applying Minimum Cut first also removes all paths, but it ignores which links the app needs
+(it can cut web from api); that is why DockWatch recommends it only as a last resort.
+
+
+3. DOES "APPLY" SAVE INTO THE SAME FILE?  YES.
+----------------------------------------------
+
+ - Apply writes the change into dockertestfile/docker-compose.yml itself, after saving a backup
+   copy in dockertestfile/.dockwatch/backups/. The next scan reads the changed file, so the fixed
+   problems are gone for good, also after you close and reopen DockWatch.
+ - Undo (Fixes -> Backups -> Restore) puts any earlier version back.
+ - Secret Guard also creates secrets/*.txt (the passwords moved out of the compose file) and a
+   .gitignore so they are never committed.
+ - Dockerfile Hardening does NOT edit app/Dockerfile. It writes app/Dockerfile.hardened and points
+   api and worker at it in docker-compose.yml. That way the original stays for comparison and
+   Undo (restoring the compose backup) switches back to it.
+ - If you edit docker-compose.yml yourself after a scan and then press Apply without rescanning,
+   DockWatch refuses ("changed since the last scan") so your edit is never lost.
+
+
+4. WHAT IS STILL REPORTED AT THE END, AND WHY THAT IS CORRECT
+--------------------------------------------------------------
+
+PASS and 0 attack paths does not mean 0 findings. These stay because fixing them needs a human
+decision that a tool must not guess:
+
+ - CL-0002 cadvisor privileged, CL-0010 node-exporter pid:host: these monitoring tools need
+   host access to do their job. DockWatch isolates them (no path from the internet reaches them)
+   but does not remove the access.
+ - CL-0001 on watchtower-socket-proxy: the proxy must hold the socket; that is the point of it.
+ - CL-0019 tag instead of digest: pinning a digest needs a registry lookup and a decision about
+   when to update. Pin by hand (image: nginx@sha256:...) or ignore the rule with a reason in
+   Settings (good way to show "ignore with reason").
+ - CL-0006 on root images (web, db, cache, watchtower, cadvisor, node-exporter): which
+   capabilities postgres or nginx need is image-specific; guessing breaks them silently.
+ - CL-0005 web port on all interfaces: it is the public website. Bind it to 127.0.0.1 only if
+   it should not be reachable from other machines.
+ - CL-0007 (low) writable root filesystem: read_only: true breaks apps that write to disk.
+
+Behaviour changes the fixes make (worth knowing before applying them to a real project):
+ - Network Segmentation puts watchtower, cadvisor and node-exporter on "internal" networks: they
+   can no longer reach the internet (watchtower cannot pull updates) until you allow it.
+ - Container Hardening sets mem_limit 512m and cpus 1.0 as starting values; tune them.
+ - After Dockerfile Hardening the app runs as UID 10001; it can read its code but not change it.
+
+
+5. GIT TIMELINE (History page)
+------------------------------
+
+This folder was committed in five steps, so the History -> Git timeline shows how the risk
+grew commit by commit and flags the commit that made it jump:
+
+   1. "demo: shop stack (web, api, db, cache)"                          risk  66, 2 paths
+   2. "demo: add background worker sharing the uploads volume"          risk  86 (+20), 2 paths
+   3. "demo: add monitoring and auto-updates (cadvisor, node-exporter,  risk 100 (+14), 5 paths
+       watchtower + docker.sock)"
+   4. "demo: make watchtower and worker run on Docker 29"               risk 100 (no change), 5 paths
+   5. "demo: publish web on 18080 (8080 is taken by Oracle XE ...)"     risk 100 (no change), 5 paths
+
+DockWatch flags commit 2 as the biggest increase: the worker shares the uploads volume with
+api, which gives an attacker a sideways route that no network setting shows. (Measured with
+`engine\dockwatch-engine.exe git-history dockertestfile`; the History page shows the same chart.)
+
+Fixes you apply are NOT committed, so the timeline always shows these five commits, and
+reset-demo.cmd can always go back to commit 5.
+
+
+6. IMAGE SCANNERS (optional: Trivy image and Dockle)
+-----------------------------------------------------
+
+Both are off by default because they download images. Turn them on in Settings -> Scanners
+(trivy-image, dockle). Docker Desktop must be running for Dockle and for the locally built
+image (dockertestfile-api:demo, built with `docker compose build`).
+
+ - Trivy image: CVEs inside each image. First run downloads its database (about 2 minutes).
+   Slow image scans are never cut short: DockWatch keeps a scanner running while it is working
+   and only stops one that does nothing for 3 minutes (Settings -> Scan patience).
+ - Dockle: CIS Docker Benchmark checks on each image. It has no Windows program, so DockWatch
+   runs Dockle's official image; images are pulled once, exported with `docker save` and
+   mounted read-only. Results are cached per image, so later scans take about 1 second.
+ - Image scanners look at the BUILT image. After Dockerfile Hardening run
+   `docker compose build api`, then rescan.
+
+Measured with ALL FIVE scanners on (compose-lint, Hadolint, Trivy config, Trivy image, Dockle):
+
+ Step                                       Max risk  Paths  Findings
+ Start                                      100 FAIL    5      871  (785 are image CVEs)
+ Network Segmentation                       100         2      867
+ Secret Guard                               100         0      862
+ Dockerfile Hardening + docker compose build 86         0      848  (Dockle: ADD and root user gone)
+ Container Hardening                         80         0      830
+ Socket Guard, Container Hardening           80 FAIL    0      839
+
+Re-measured on 15 Nov 2026 (start only): 100 FAIL, 5 paths, 869 findings (785 image CVEs, 20 from
+Dockle), every image scanned. Image-scanner counts can change a little over time because the
+images and Trivy's CVE database are updated; the attack paths and the Compose findings do not.
+First full scan about 1.5 to 2 minutes; the next scan in the same DockWatch session about
+7 seconds, because Dockle results are cached per image.
+
+So with image scanners on, the end is 0 attack paths but still FAIL at 80. That is correct
+and worth noting: what is left is INSIDE the third-party images, which no Compose change
+can fix:
+ - web (80): 15 points of nginx CVEs, plus Dockle CIS-DI-0010 "credential in ENV". That one is
+   a known false positive: KEY_SHA512 is the checksum of nginx's public signing key.
+ - The cure is newer base images, or recording an accepted risk: Findings -> Ignore... with a
+   reason (for example "CIS-DI-0010 on web: KEY_SHA512 is a public key checksum").
+With image scanners off (default) the same fixes end at 61 PASS.
+
+
+7. RESET FOR THE NEXT DEMO
+--------------------------
+
+   Double-click reset-demo.cmd in this folder.
+
+   Or from a terminal:  dockertestfile\reset-demo.cmd   (inside this folder: .\reset-demo.cmd)
+
+It restores docker-compose.yml and app/ from git and deletes the generated files
+(app/Dockerfile.hardened, secrets/, .gitignore, .dockwatch/). Rescan: 100 / FAIL again.
+
+
+8. PROOF THAT THE FIXED STACK STILL RUNS
+-----------------------------------------
+
+Checked with Docker Desktop on this PC (Docker 29.9.3). The website is published on port 18080
+(port 8080 is used by Oracle XE on this PC). Open http://localhost:18080 after `docker compose up`.
+DockWatch itself does not need the stack to run: it only reads the files.
+
+ Before the fixes (original files):   all 8 services run; api runs as root (UID 0);
+                                      web can reach cadvisor (privileged).
+ After ALL fixes (files exactly as     all 9 services run, every health check healthy,
+ DockWatch wrote them):                web answers HTTP 200, and:
+   - web cannot reach db, cadvisor or the socket proxy; it still reaches api (it needs to).
+   - api reaches db and cache; runs as UID 10001; reads its password from /run/secrets.
+   - db starts with POSTGRES_PASSWORD_FILE, no password in its environment.
+   - the socket proxy allows /containers/json (200) and blocks /volumes, /exec, /build (403);
+     watchtower works through it.
+
+Two demo details exist only so the stack runs on current Docker:
+ - watchtower 1.7.1 crashes on Docker 29 without DOCKER_API_VERSION (with or without fixes).
+ - worker has its own health check (the image's check probes the API port).
+
