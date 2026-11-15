@@ -1,0 +1,2 @@
+b508f308dce995c48e65a8d2dfdd5fa241b290c6347db6339fa162a0b5a05e79  DockWatch-1.0.0-windows-x64.zip
+4bd79a65b0f08990d2942773679b35201ca66f439af6d8f1f74bf5aeb37c2042  dockwatch-engine-linux-x86_64.tar.gz
